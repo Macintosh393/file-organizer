@@ -1,9 +1,11 @@
 import { Command } from "commander";
 import Scanner from "./lib/scanner.js";
+import DuplicateFinder from "./lib/duplicates.js";
+import Organizer from "./lib/organizer.js";
+
 import drawProgressBar from "./util/draw-progress.js";
 import { isValidDir } from "./util/validators.js";
 import { formatSize } from "./util/formatters.js";
-import DuplicateFinder from "./lib/duplicates.js";
 
 const program = new Command();
 
@@ -129,7 +131,38 @@ program
   .command("organize <directory>")
   .description("Organize directory into output path")
   .requiredOption("--output <path>", "Destination path")
-  .action((directory) => {});
+  .action(async (directory, options) => {
+    await isValidDir(directory);
+    const organizer = new Organizer();
+
+    organizer.on("copy-start", (data) => {
+      console.log(`📦 Organizing: ${data.directory}`);
+      console.log(`Target: ${data.output}\n`);
+    });
+
+    organizer.on("copy-progress", (data) => {
+      process.stdout.write(
+        `\rCopying files... ${drawProgressBar(data.current, data.total)}`,
+      );
+    });
+
+    organizer.on("copy-complete", (data) => {
+      console.log(`\n\n✅ Organization complete!`);
+
+      console.log(`\nSummary:`);
+      Object.entries(data.summary).forEach(([category, value]) => {
+        console.log(
+          `\t${category.padEnd(15, " ")} ${value.count.toString().padStart(3, " ")} files → ${value.path}`,
+        );
+      });
+
+      console.log(
+        `\nTotal copied: ${data.totalFiles} (${formatSize(data.totalSize)})`,
+      );
+    });
+
+    await organizer.organize(directory, options.output);
+  });
 
 program
   .command("cleanup <directory>")
