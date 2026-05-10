@@ -2,6 +2,7 @@ import { Command } from "commander";
 import Scanner from "./lib/scanner.js";
 import DuplicateFinder from "./lib/duplicates.js";
 import Organizer from "./lib/organizer.js";
+import Cleanup from "./lib/cleanup.js";
 
 import drawProgressBar from "./util/draw-progress.js";
 import { isValidDir } from "./util/validators.js";
@@ -172,6 +173,68 @@ program
     "Number of days that file should be older in order to be flagged",
   )
   .option("--confirm", "Option to actualy remove the flagged files")
-  .action((directory, options) => {});
+  .action(async (directory, options) => {
+    await isValidDir(directory);
+    const cleanup = new Cleanup();
+
+    cleanup.on("cleanup-start", (data) => {
+      console.log(`🧹 Cleanup: ${data.directory}\n`);
+      console.log(`Looking for files older than ${data.threshold} days...`);
+    });
+
+    cleanup.on("file-checked", (data) => {
+      process.stdout.write(
+        `\rChecking files... ${drawProgressBar(data.current, data.total)}`,
+      );
+    });
+
+    cleanup.on("cleanup-complete", (data) => {
+      console.log(`\n\nFound ${data.totalFiles} files to delete:`);
+      console.log("\n" + "━".repeat(34));
+
+      data.upForDeletion.forEach((file, index) => {
+        console.log("\n" + file.fileRelName);
+        console.log(`\tSize: ${formatSize(file.fileSize)}`);
+        console.log(
+          `\tModified: ${file.fileAge} days ago (${file.fileModified})`,
+        );
+      });
+
+      console.log("\n" + "━".repeat(34));
+      console.log(
+        `Total: ${data.totalFiles} files (${formatSize(data.totalSize)})`,
+      );
+    });
+
+    cleanup.on("delete-start", (data) => {
+      console.log(
+        `\n⚠️  DELETING ${data.totalFiles} files (${formatSize(data.totalSize)}). This action cannot be undone!\n`,
+      );
+    });
+
+    cleanup.on("file-deleted", (data) => {
+      process.stdout.write(
+        `\rDeleting... ${drawProgressBar(data.current, data.total)}`,
+      );
+    });
+
+    cleanup.on("delete-complete", (data) => {
+      console.log(`\n\n✅ Deletion complete!`);
+      console.log(
+        `Deleted: ${data.totalFiles} files (${formatSize(data.totalSize)} freed)`,
+      );
+    });
+
+    const upForDeletion = await cleanup.cleanup(directory, options.olderThan);
+
+    if (options.confirm && upForDeletion.length > 0) {
+      await cleanup.deleteFiles(upForDeletion);
+    } else if (options.confirm) {
+      console.log("\nNo files to delete.");
+    } else {
+      console.log("\n⚠️  DRY RUN MODE: No files were deleted.");
+      console.log(`To actually delete these files, run with --confirm flag.`);
+    }
+  });
 
 program.parse();
