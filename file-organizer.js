@@ -5,7 +5,7 @@ import Organizer from "./lib/organizer.js";
 import Cleanup from "./lib/cleanup.js";
 
 import drawProgressBar from "./util/draw-progress.js";
-import { isValidDir } from "./util/validators.js";
+import { isValidDir, validateDays } from "./util/validators.js";
 import { formatSize } from "./util/formatters.js";
 
 const program = new Command();
@@ -19,7 +19,12 @@ program
   .command("scan <directory>")
   .description("Scan a directory for files with details and stats")
   .action(async (directory) => {
-    await isValidDir(directory);
+    try {
+      await isValidDir(directory);
+    } catch (error) {
+      console.error(`\u274c Error: ${error.message}`);
+      process.exit(1);
+    }
     const scanner = new Scanner();
 
     scanner.on("scan-start", (data) => {
@@ -70,6 +75,11 @@ program
       );
     });
 
+    scanner.on("error", (error) => {
+      console.error(`\n❌ Error: ${error.message}`);
+      process.exit(1);
+    });
+
     await scanner.scan(directory);
   });
 
@@ -77,7 +87,12 @@ program
   .command("duplicates <directory>")
   .description("Find duplicates by hash and report wasted space")
   .action(async (directory) => {
-    await isValidDir(directory);
+    try {
+      await isValidDir(directory);
+    } catch (error) {
+      console.error(`\u274c Error: ${error.message}`);
+      process.exit(1);
+    }
     const duplicateFinder = new DuplicateFinder();
 
     duplicateFinder.on("duplicates-start", (data) => {
@@ -125,6 +140,11 @@ program
       console.log(`\n💾 Total wasted space: ${formatSize(totalSize)}`);
     });
 
+    duplicateFinder.on("error", (error) => {
+      console.error(`\n❌ Error: ${error.message}`);
+      process.exit(1);
+    });
+
     await duplicateFinder.findDuplicates(directory);
   });
 
@@ -133,7 +153,12 @@ program
   .description("Organize directory into output path by categories")
   .requiredOption("--output <path>", "Destination path")
   .action(async (directory, options) => {
-    await isValidDir(directory);
+    try {
+      await isValidDir(directory);
+    } catch (error) {
+      console.error(`\u274c Error: ${error.message}`);
+      process.exit(1);
+    }
     const organizer = new Organizer();
 
     organizer.on("copy-start", (data) => {
@@ -162,6 +187,11 @@ program
       );
     });
 
+    organizer.on("error", (error) => {
+      console.error(`\n❌ Error: ${error.message}`);
+      process.exit(1);
+    });
+
     await organizer.organize(directory, options.output);
   });
 
@@ -173,10 +203,16 @@ program
   .requiredOption(
     "--older-than <days>",
     "Number of days that file should be older in order to be flagged",
+    validateDays,
   )
   .option("--confirm", "Option to actualy remove the flagged files")
   .action(async (directory, options) => {
-    await isValidDir(directory);
+    try {
+      await isValidDir(directory);
+    } catch (error) {
+      console.error(`❌ Error: ${error.message}`);
+      process.exit(1);
+    }
     const cleanup = new Cleanup();
 
     cleanup.on("cleanup-start", (data) => {
@@ -227,10 +263,18 @@ program
       );
     });
 
-    const upForDeletion = await cleanup.cleanup(directory, options.olderThan);
+    cleanup.on("error", (error) => {
+      console.error(`\n❌ Error: ${error.message}`);
+      process.exit(1);
+    });
+
+    const { upForDeletion, upForDeletionSize } = await cleanup.cleanup(
+      directory,
+      options.olderThan,
+    );
 
     if (options.confirm && upForDeletion.length > 0) {
-      await cleanup.deleteFiles(upForDeletion);
+      await cleanup.deleteFiles(upForDeletion, upForDeletionSize);
     } else if (options.confirm) {
       console.log("\nNo files to delete.");
     } else {
