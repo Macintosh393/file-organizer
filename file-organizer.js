@@ -17,7 +17,7 @@ program
 
 program
   .command("scan <directory>")
-  .description("Scan a directory for files")
+  .description("Scan a directory for files with details and stats")
   .action(async (directory) => {
     await isValidDir(directory);
     const scanner = new Scanner();
@@ -75,7 +75,7 @@ program
 
 program
   .command("duplicates <directory>")
-  .description("Find duplicates")
+  .description("Find duplicates by hash and report wasted space")
   .action(async (directory) => {
     await isValidDir(directory);
     const duplicateFinder = new DuplicateFinder();
@@ -130,7 +130,7 @@ program
 
 program
   .command("organize <directory>")
-  .description("Organize directory into output path")
+  .description("Organize directory into output path by categories")
   .requiredOption("--output <path>", "Destination path")
   .action(async (directory, options) => {
     await isValidDir(directory);
@@ -167,7 +167,9 @@ program
 
 program
   .command("cleanup <directory>")
-  .description("Cleanup the directory")
+  .description(
+    "Cleanup the directory from files older than specified number of days",
+  )
   .requiredOption(
     "--older-than <days>",
     "Number of days that file should be older in order to be flagged",
