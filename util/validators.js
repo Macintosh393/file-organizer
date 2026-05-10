@@ -1,4 +1,4 @@
-import fs from "fs/promises";
+import fs from "node:fs/promises";
 
 export async function isValidDir(path) {
   const stats = await fs.stat(path);

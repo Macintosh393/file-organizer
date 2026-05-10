@@ -3,6 +3,7 @@ import Scanner from "./lib/scanner.js";
 import drawProgressBar from "./util/draw-progress.js";
 import { isValidDir } from "./util/validators.js";
 import { formatSize } from "./util/formatters.js";
+import DuplicateFinder from "./lib/duplicates.js";
 
 const program = new Command();
 
@@ -23,7 +24,9 @@ program
     });
 
     scanner.on("file-found", (data) => {
-      process.stdout.write(drawProgressBar(data.current, data.total));
+      process.stdout.write(
+        "\rProcessing... " + drawProgressBar(data.current, data.total),
+      );
     });
 
     scanner.on("scan-complete", (data) => {
@@ -70,7 +73,57 @@ program
 program
   .command("duplicates <directory>")
   .description("Find duplicates")
-  .action((directory) => {});
+  .action(async (directory) => {
+    await isValidDir(directory);
+    const duplicateFinder = new DuplicateFinder();
+
+    duplicateFinder.on("duplicates-start", (data) => {
+      console.log(`🔍 Searching for duplicates in: ${data.directory}`);
+    });
+
+    duplicateFinder.on("file-processed", (data) => {
+      process.stdout.write(
+        "\rCalculating hashes... " + drawProgressBar(data.current, data.total),
+      );
+    });
+
+    duplicateFinder.on("duplicates-found", (data) => {
+      const { duplicates, totalSize } = data;
+
+      const duplicateEntries = Object.entries(duplicates)
+        .filter(([, value]) => value.files.length > 1)
+        .sort((a, b) => b[1].fileSize - a[1].fileSize);
+      if (duplicateEntries.length === 0) {
+        console.log("\n\nNo duplicates found.");
+        return;
+      }
+
+      console.log(
+        `\n\nFound ${duplicateEntries.length} duplicate groups (${formatSize(totalSize)} wasted):`,
+      );
+
+      duplicateEntries.forEach(([hash, value], index) => {
+        console.log("\n" + "━".repeat(34));
+        console.log(
+          `Group ${index + 1} (${value.files.length} copies, ${formatSize(value.fileSize)} each):`,
+        );
+
+        console.log(`\tSHA256: ${hash}\n`);
+        value.files.forEach((file) => {
+          console.log(`\t📄 ${file}`);
+        });
+
+        console.log(
+          `\n\tWasted space: ${formatSize(value.fileSize * (value.files.length - 1))}`,
+        );
+      });
+
+      console.log("\n" + "━".repeat(34));
+      console.log(`\n💾 Total wasted space: ${formatSize(totalSize)}`);
+    });
+
+    await duplicateFinder.findDuplicates(directory);
+  });
 
 program
   .command("organize <directory>")
